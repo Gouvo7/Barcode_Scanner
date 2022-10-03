@@ -40,7 +40,7 @@ namespace Barcode_Scanner
 
         // Scans the barcode number
         [Obsolete]
-        public void Scan_Barcode(string cropped)
+        public string Scan_Barcode(string cropped)
         {
             BarcodeResult Result = BarcodeReader.QuicklyReadOneBarcode(cropped);
             if (Result != null)
@@ -52,12 +52,13 @@ namespace Barcode_Scanner
             {
                 Console.WriteLine("Could not identify barcode");
             }
+            return Result.Text;
         }
 
         // Deletes the temporary files
         public void File_Deleter(string pdf_file, string png_path, string cropped)
         {
-            //File.Delete(pdf_file);        // Should be uncommented out once the .exe is released
+            //File.Delete(pdf_file);        // If you want to delete the PDF afterwards, uncomment this line.
             File.Delete(png_path);
             File.Delete(cropped);
         }
@@ -65,10 +66,11 @@ namespace Barcode_Scanner
         [Obsolete]
         static void Main(string[] args)
         {
+            // Change the paths based on where are your files or which directory you want to work with.
             string pdf_file = "C:\\Users\\ngouvousis\\source\\repos\\Barcode_Scanner\\Barcode_Scanner\\bin\\Debug\\netcoreapp3.1\\tmp.pdf";
             string png_path = "C:\\Users\\ngouvousis\\source\\repos\\Barcode_Scanner\\Barcode_Scanner\\bin\\Debug\\netcoreapp3.1\\tmp.png";
             string cropped = "C:\\Users\\ngouvousis\\source\\repos\\Barcode_Scanner\\Barcode_Scanner\\bin\\Debug\\netcoreapp3.1\\cropped.png";
-
+            string barcode;
             Program p = new Program();
             try
             {
@@ -91,7 +93,7 @@ namespace Barcode_Scanner
             }
             try
             {
-                p.Scan_Barcode(cropped);
+                barcode = p.Scan_Barcode(cropped);
             }
             catch (Exception e)
             {
@@ -101,7 +103,5 @@ namespace Barcode_Scanner
             p.File_Deleter(pdf_file, png_path, cropped);
 
         }
-
-        
     }
 }

@@ -3,6 +3,9 @@ using System.IO;
 using IronBarCode;
 using BitMiracle.Docotic.Pdf;
 using System.Drawing;
+using System.Diagnostics;
+using MySql.Data.MySqlClient;
+using System.Collections.Generic;
 
 namespace Barcode_Scanner
 {
@@ -10,27 +13,34 @@ namespace Barcode_Scanner
     {
 
         // Converts the first page of the PDF file to a PNG.
-        public void Create_Png(string pdf_file)
+        public void Create_Png(string path,string pdf_file)
         {
-            var pdf = new PdfDocument(@pdf_file);
+            PdfDocument pdf = new PdfDocument(path+pdf_file);
             PdfDrawOptions options = PdfDrawOptions.Create();
             options.BackgroundColor = new PdfRgbColor(255, 255, 255);
             options.HorizontalResolution = 300;
             options.VerticalResolution = 300;
-            pdf.Pages[0].Save($"tmp.png", options);
+            pdf_file = pdf_file.Remove(pdf_file.Length - 3);
+            string new_path = path + pdf_file + "png";
+            pdf.Pages[0].Save(new_path, options);
         }
 
 
         // Crops the image to a fixed location where the barcode is
-        public void Crop_Img(string png_path, string cropped)
+        [Obsolete]
+        public string Crop_Img(string path,string png_path)
         {
+
             try
             {
                 Image img = Image.FromFile(png_path);
                 Bitmap bmpImage = new Bitmap(img);
-                Rectangle r = new Rectangle(250, 100, 500, 500);
+                Rectangle r = new Rectangle(250, 80, 500, 500);
                 Bitmap bmpCrop = bmpImage.Clone(r, bmpImage.PixelFormat);
-                bmpCrop.Save(cropped);
+                bmpCrop.Save("a.png");
+                string barcode = Scan_Barcode("a.png");
+                return barcode;
+                
             }
             catch (Exception e)
             {
@@ -43,16 +53,19 @@ namespace Barcode_Scanner
         public string Scan_Barcode(string cropped)
         {
             BarcodeResult Result = BarcodeReader.QuicklyReadOneBarcode(cropped);
+            BarcodeReader.QuicklyReadOneBarcode("a.png");
             if (Result != null)
             {
-                Console.WriteLine("Barcode read with no errors!");
-                Console.WriteLine("Barcode = " + Result.Text);
+                Console.WriteLine("Barcode read with no errors! Barcode is:" + Result.Text+ "\n\n");
             }
             else
             {
-                Console.WriteLine("Could not identify barcode");
+                Console.WriteLine("Could not identify barcode\n\n");
             }
-            return Result.Text;
+            if (Result!= null)
+                return Result.Text;
+            else
+                return null;
         }
 
         // Deletes the temporary files
@@ -66,42 +79,63 @@ namespace Barcode_Scanner
         [Obsolete]
         static void Main(string[] args)
         {
-            // Change the paths based on where are your files or which directory you want to work with.
-            string pdf_file = "C:\\Users\\ngouvousis\\source\\repos\\Barcode_Scanner\\Barcode_Scanner\\bin\\Debug\\netcoreapp3.1\\tmp.pdf";
-            string png_path = "C:\\Users\\ngouvousis\\source\\repos\\Barcode_Scanner\\Barcode_Scanner\\bin\\Debug\\netcoreapp3.1\\tmp.png";
-            string cropped = "C:\\Users\\ngouvousis\\source\\repos\\Barcode_Scanner\\Barcode_Scanner\\bin\\Debug\\netcoreapp3.1\\cropped.png";
-            string barcode;
-            Program p = new Program();
-            try
-            {
-                p.Create_Png(pdf_file);
-                
-            } 
-            catch (Exception e)
-            {
-                Console.WriteLine($"The PDF file was not found: '{e}'");
-                return;
-            }
-            try
-            {
-                p.Crop_Img(png_path, cropped);
-            }
-            catch (Exception e)
-            { 
-                Console.WriteLine($"The image was not found or something went wrong with the cropping process: '{e}'");
-                return;
-            }
-            try
-            {
-                barcode = p.Scan_Barcode(cropped);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"The cropped image file was not found: '{e}'");
-                return;
-            }
-            p.File_Deleter(pdf_file, png_path, cropped);
+            //Stopwatch timer = new Stopwatch();
+            //timer.Start();
+            List<string> barcode_list = new List<string> { };
+            string pdf_path = "C:\\Users\\ngouvousis\\Desktop\\PDFS\\";
 
+            string[] dirs = Directory.GetFiles(pdf_path, "*.pdf", SearchOption.AllDirectories);
+            string filename = null;
+            Program p = new Program();
+            foreach (string dir in dirs)
+            {
+                //Console.WriteLine(dir); // dir is the whole path
+                filename = Path.GetFileName(dir); // filename is the file name
+                string f = filename.Remove(filename.Length - 3); // f is the file name without the extension
+                p.Create_Png(pdf_path, filename);
+                string png_f = f + "png";
+                string png_path = pdf_path + png_f;
+                Console.WriteLine("PNG_Path is : " + png_path);
+                string barc = p.Crop_Img(pdf_path, png_path);
+                if (barc!=null && barc!=" ")
+                    barcode_list.Add(barc);                
+            }
+            MySql.Data.MySqlClient.MySqlConnection conn;
+            string myConnectionString;
+            //myConnectionString = "server=10.1.11.28:3306;uid=ngouvousis;pwd=Nek@niro_{Gou22};database=lawdb";
+            myConnectionString = "server=localhost;uid=root;" +
+            "pwd=root;database=lawdb";
+            foreach (var x in barcode_list)
+            {
+                try
+                {
+
+                    conn = new MySql.Data.MySqlClient.MySqlConnection(myConnectionString);
+                    //conn.ConnectionString = myConnectionString;
+                    conn.Open();
+                    MySql.Data.MySqlClient.MySqlCommand query = new MySql.Data.MySqlClient.MySqlCommand("SELECT * FROM WCM_LAC where WCMLAC_ID = '"+x+"'" , conn);
+
+                    using (MySqlDataReader reader = query.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            Console.WriteLine(String.Format("{0}", reader["wcmlac_ID"]));
+                        }
+                    }
+
+                    //var res = cmd.ExecuteScalar().ToString();
+                    //Console.WriteLine("Res is: " + res);
+                }
+                catch (MySql.Data.MySqlClient.MySqlException ex)
+                {
+                    Console.WriteLine(ex.Message);
+                }
+            }
+            //p.File_Deleter(pdf_file, png_path, cropped);
+            //timer.Stop();
+            //Console.WriteLine("time taken = " + timer.Elapsed);
+
+            Console.WriteLine("Finished");
         }
     }
 }

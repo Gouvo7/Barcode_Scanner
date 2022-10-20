@@ -1,30 +1,16 @@
-﻿using System;
-using System.IO;
+﻿using BitMiracle.Docotic.Pdf;
 using IronBarCode;
-using BitMiracle.Docotic.Pdf;
-using System.Drawing;
-using System.Diagnostics;
 using MySql.Data.MySqlClient;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
 
 namespace Barcode_Scanner
 {
     class Program
     {
-
-        // Converts the first page of the PDF file to a PNG.
-        public void Create_Png(string path,string pdf_file)
-        {
-            PdfDocument pdf = new PdfDocument(path+pdf_file);
-            PdfDrawOptions options = PdfDrawOptions.Create();
-            options.BackgroundColor = new PdfRgbColor(255, 255, 255);
-            options.HorizontalResolution = 300;
-            options.VerticalResolution = 300;
-            pdf_file = pdf_file.Remove(pdf_file.Length - 3);
-            string new_path = path + pdf_file + "png";
-            pdf.Pages[0].Save(new_path, options);
-        }
-
 
         // Crops the image to a fixed location where the barcode is
         [Obsolete]
@@ -39,8 +25,10 @@ namespace Barcode_Scanner
                 Bitmap bmpCrop = bmpImage.Clone(r, bmpImage.PixelFormat);
                 bmpCrop.Save("a.png");
                 string barcode = Scan_Barcode("a.png");
+                img.Dispose();
+                bmpImage.Dispose();
                 return barcode;
-                
+
             }
             catch (Exception e)
             {
@@ -69,73 +57,110 @@ namespace Barcode_Scanner
         }
 
         // Deletes the temporary files
-        public void File_Deleter(string pdf_file, string png_path, string cropped)
+        public void File_Deleter(string pdf_file, string png_path)
         {
-            //File.Delete(pdf_file);        // If you want to delete the PDF afterwards, uncomment this line.
-            File.Delete(png_path);
-            File.Delete(cropped);
+            //try
+            //{
+                //File.Delete(pdf_file);        // If you want to delete the PDF afterwards, uncomment this line.
+            if (File.Exists(png_path))
+            {
+                File.Delete(png_path);
+                
+            }
+            Console.WriteLine(png_path);
+
+            //File.Delete(cropped);
+            //}
+            //catch (System.IO.IOException) { 
+            //}
+        }
+
+        // Converts the first page of the PDF file to a PNG.
+        public int Create_Png(string pdf_path, string pdf_file)
+        {
+            PdfDocument pdf = new PdfDocument(pdf_path + pdf_file);
+            PdfDrawOptions options = PdfDrawOptions.Create();
+            options.BackgroundColor = new PdfRgbColor(255, 255, 255);
+            options.HorizontalResolution = 300;
+            options.VerticalResolution = 300;
+            pdf_file = pdf_file.Remove(pdf_file.Length - 3);
+            string new_path = pdf_path + pdf_file + "png";
+            pdf.Pages[0].Save(new_path, options);
+            int pages = pdf.PageCount;
+            pdf.Dispose();
+            Console.WriteLine("Number of pages for each document: " + pages);
+            return pages;
         }
 
         [Obsolete]
         static void Main(string[] args)
         {
-            //Stopwatch timer = new Stopwatch();
-            //timer.Start();
-            List<string> barcode_list = new List<string> { };
-            string pdf_path = "C:\\Users\\ngouvousis\\Desktop\\PDFS\\";
-
-            string[] dirs = Directory.GetFiles(pdf_path, "*.pdf", SearchOption.AllDirectories);
-            string filename = null;
+            Stopwatch timer = new Stopwatch();
+            timer.Start();
+            List<List<string>> mylist = new List<List<string>>();
+            
             Program p = new Program();
+            string pdf_path = "C:\\Users\\ngouvousis\\Desktop\\PDFS\\";  // Change if your pdfs are in another directory
+            string png_path = "";
+            string pdf_file = null;
+            string[] dirs = Directory.GetFiles(pdf_path, "*.pdf", SearchOption.AllDirectories);
+            
             foreach (string dir in dirs)
             {
                 //Console.WriteLine(dir); // dir is the whole path
-                filename = Path.GetFileName(dir); // filename is the file name
-                string f = filename.Remove(filename.Length - 3); // f is the file name without the extension
-                p.Create_Png(pdf_path, filename);
+                pdf_file = Path.GetFileName(dir); // filename is the name of the file
+                string f = pdf_file.Remove(pdf_file.Length - 3); // f is the file name without the extension
+                int pages = p.Create_Png(pdf_path, pdf_file);
                 string png_f = f + "png";
-                string png_path = pdf_path + png_f;
+                png_path = pdf_path + png_f;
                 Console.WriteLine("PNG_Path is : " + png_path);
                 string barc = p.Crop_Img(pdf_path, png_path);
-                if (barc!=null && barc!=" ")
-                    barcode_list.Add(barc);                
+                if (barc!=null && barc!=" ") { 
+                    mylist.Add(new List<string> { barc, pdf_file, pages.ToString() });
+                    
+                }
+                p.File_Deleter(pdf_file, png_path);
             }
-            MySql.Data.MySqlClient.MySqlConnection conn;
-            string myConnectionString;
+            string connectionString = "server=localhost;uid=root;pwd=root;database=lawdb";
             //myConnectionString = "server=10.1.11.28:3306;uid=ngouvousis;pwd=Nek@niro_{Gou22};database=lawdb";
-            myConnectionString = "server=localhost;uid=root;" +
-            "pwd=root;database=lawdb";
-            foreach (var x in barcode_list)
+            int i = 0;
+            string tmp = "Test Eggrafo";
+            DateTime now = DateTime.Now;
+
+            foreach (List<String> sublist in mylist)
             {
-                try
+                i++;
+                using (MySqlConnection conn = new MySqlConnection(connectionString))
                 {
+                    //MySql.Data.MySqlClient.MySqlCommand query = new MySql.Data.MySqlClient.MySqlCommand("SELECT * FROM WCM_LAC where WCMLAC_ID = '"+x+"'" , conn);
+                    //string query = "INSERT INTO WCM_DOC VALUES (NULL,@pr_id,wcm_lac,wcmLAC_ID,@wcnDoc_Title,@wcmDoc_Type,wcmDOC_FileType,@wcmDoc_URL,wcmDOC_Pages,@create_dt,@last_upd,@wdc_lock,0,NULL,NULL";
+                    string query_tmp = "INSERT INTO WCM_DOC VALUES (NULL, @pr_id, 'wcm_lac', 'wcmLAC_ID', '"+ tmp +"', 200, 9, @wcmDoc_URL, @wcmDoc_Pages, @create_dt, @last_upd, 0, 0, NULL, NULL)";
 
-                    conn = new MySql.Data.MySqlClient.MySqlConnection(myConnectionString);
-                    //conn.ConnectionString = myConnectionString;
-                    conn.Open();
-                    MySql.Data.MySqlClient.MySqlCommand query = new MySql.Data.MySqlClient.MySqlCommand("SELECT * FROM WCM_LAC where WCMLAC_ID = '"+x+"'" , conn);
-
-                    using (MySqlDataReader reader = query.ExecuteReader())
+                    using (MySqlCommand command = new MySqlCommand(query_tmp, conn))
                     {
-                        if (reader.Read())
+                        command.Parameters.AddWithValue("@pr_id",sublist[0] );
+                        command.Parameters.AddWithValue("@wcmDoc_URL", sublist[1]);
+                        command.Parameters.AddWithValue("@wcmDOC_Pages", sublist[2]);
+                        command.Parameters.AddWithValue("@create_dt", now);
+                        command.Parameters.AddWithValue("@last_upd", now);
+                        conn.Open();
+                        try
                         {
-                            Console.WriteLine(String.Format("{0}", reader["wcmlac_ID"]));
+                            int res = command.ExecuteNonQuery();
+                            if (res < 0)
+                                Console.WriteLine("There was an error during data insertion.");
+                            else
+                                Console.WriteLine("Very good very nice!");
                         }
+                        catch (MySqlException){
+                            Console.WriteLine("Error: Duplicate entry was found for doc: " + sublist[1]);}
                     }
-
-                    //var res = cmd.ExecuteScalar().ToString();
-                    //Console.WriteLine("Res is: " + res);
                 }
-                catch (MySql.Data.MySqlClient.MySqlException ex)
-                {
-                    Console.WriteLine(ex.Message);
-                }
-            }
-            //p.File_Deleter(pdf_file, png_path, cropped);
-            //timer.Stop();
-            //Console.WriteLine("time taken = " + timer.Elapsed);
-
-            Console.WriteLine("Finished");
+            }            
+            timer.Stop();
+            Console.WriteLine("time taken = " + timer.Elapsed);
         }
+
+        
     }
 }

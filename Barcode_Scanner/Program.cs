@@ -43,13 +43,11 @@ namespace Barcode_Scanner
             BarcodeResult res = BarcodeReader.QuicklyReadOneBarcode(cropped_png);
             if (res != null)
             {
-                Console.WriteLine("Barcode read with no errors! Barcode is:" + res.Text+ "\n");
+                //Console.WriteLine("Barcode read with no errors! Barcode is:" + res.Text+ "\n");
                 return res.Text;
             }
             else
-            {
                 return null;
-            }
         }
 
         /* Deletes the temporary files */
@@ -93,7 +91,9 @@ namespace Barcode_Scanner
 
             Program p = new Program();
             string pdf_path = "C:\\Users\\ngouvousis\\Desktop\\PDFS\\";  // Change if your pdfs are in another directory
+            string backup_path = "C:\\Users\\ngouvousis\\Desktop\\Backups\\"; // Change if you want to store your backups in another directory
             string png_path, pdf_file;
+            int no_Changes = 0;
             try
             {
                 string[] dirs = Directory.GetFiles(pdf_path, "*.pdf", SearchOption.AllDirectories);
@@ -106,10 +106,16 @@ namespace Barcode_Scanner
                     int pages = p.Create_Png(pdf_path, pdf_file); // Converts the pdf into an image
                     string png_f = f + "png";                     
                     png_path = pdf_path + png_f;
-                    string barc = p.Crop_Img(png_path);
+                    string barc = p.Crop_Img(png_path); // Crops the image and keeps the upper left part of the photo (that's where the barcode is). Returns    
+                    
                     if (barc != null && barc != " ")
-                        mylist.Add(new List<string> { barc, pdf_file, pages.ToString() });
+                        mylist.Add(new List<string> { barc, pdf_file, pages.ToString() }); 
                     p.File_Deleter(pdf_file, png_path);
+
+                    /* Moving files to backup directory */
+                    string source = pdf_path + pdf_file;
+                    string dest = backup_path + pdf_file;
+                    //System.IO.File.Move(source,dest); // Uncomment to move files into backup directory
                 }
             }
             catch (System.IO.DirectoryNotFoundException)
@@ -129,57 +135,73 @@ namespace Barcode_Scanner
             //myConnectionString = "server=10.1.11.28:3306;uid=ngouvousis;pwd=Nek@niro_{Gou22};database=lawdb";
             string connectionString = "server=localhost;uid=root;pwd=root;database=lawdb";
 
-            /* For each successfully scanned barcode, we will insert the corresponding values 
-             * to the table */
+            /* For each successfully scanned barcode, we will try to find it the doc already exists in the table.
+             * If not, then we will insert the corresponding values to the table */
             foreach (List<String> sublist in mylist)
             {
                 bool canInsert = false;
                 using (MySqlConnection conn = new MySqlConnection(connectionString))
                 {
-                    string query_tmp = "select * from wcm_doc where wcmdoc_URL like '%"+"@url"+"%'";
+                    string query_tmp = "select * from wcm_doc where wcmdoc_URL like '%@url%' and wcmDOC_FileType = 9";
                     using (MySqlCommand command = new MySqlCommand(query_tmp, conn))
                     {
                         command.Parameters.AddWithValue("@url", sublist[0]);
                         conn.Open();
-                            using (MySqlDataReader reader = command.ExecuteReader())
+                        var res = Convert.ToInt32(command.ExecuteScalar());
+                        if (res == 0)
+                            canInsert = true;
+                        else
+                            Console.WriteLine("Cannot Insert");
+                        conn.Close();
+                        /*
+                            using (MySqlDataReader reader = command.Executer())
                             {
-                                if (reader.Read())
+                                if (reader.HasRows)
                                     Console.WriteLine("CANNOT INSERT");
                                 else
                                     canInsert = true;
-                            }
+                                reader.Close();
+                        }*/
                     }
                 }
                 if (canInsert)
                 {
                     using (MySqlConnection conn = new MySqlConnection(connectionString))
                     {
-                        string query_tmp = "INSERT INTO WCM_DOC VALUES (NULL, @pr_id, 'wcm_lac', 'wcmLAC_ID', '" + tmp + "', " +
-                            "200, 9, @wcmDoc_URL, @wcmDoc_Pages, @create_dt, @last_upd, 0, 0, NULL, NULL)";
+                        string query_tmp = "INSERT INTO WCM_DOC (wcmDOC_PR_ID,wcmDOC_TBL,wcmDOC_FieldID,wcmDOC_Title,wcmDOC_Type,wcmDOC_Filetype,wcmDOC_URL,wcmDOC_Pages) VALUES " +
+                            "(@pr_id, 'wcm_lac', 'wcmLAC_ID', '" + tmp + "', 200, 9, @wcmDoc_URL, @wcmDoc_Pages)";
                         using (MySqlCommand command = new MySqlCommand(query_tmp, conn))
                         {
                             command.Parameters.AddWithValue("@pr_id", sublist[0]);
                             command.Parameters.AddWithValue("@wcmDoc_URL", sublist[1]);
                             command.Parameters.AddWithValue("@wcmDOC_Pages", sublist[2]);
-                            command.Parameters.AddWithValue("@create_dt", now);
-                            command.Parameters.AddWithValue("@last_upd", now);
                             conn.Open();
                             try
                             {
                                 int res = command.ExecuteNonQuery();
-                                if (res < 0)
-                                    Console.WriteLine("There was an error during data insertion.");
+                                if (res == 1)
+                                    no_Changes++;
+                                Console.WriteLine("Succsefully inserted file: " + sublist[1]);
                             }
                             catch (MySqlException)
                             {
                                 Console.WriteLine("Error: Duplicate entry was found for doc: " + sublist[1]);
                             }
+                            conn.Close();
                         }
                     }
                 }
             }
             timer.Stop();
-            Console.WriteLine("time taken = " + timer.Elapsed);
+            Console.WriteLine("Total time elapsed: " + timer.Elapsed);
+            Console.WriteLine("Number of insertions in database: " + no_Changes);
         }
     }
 }
+//      For Tomorrow
+// To move a file or folder to a new location:
+
+
+// To move an entire directory. To programmatically modify or combine
+// path strings, use the System.IO.Path class.
+//System.IO.Directory.Move(@"C:\Users\Public\public\test\", @"C:\Users\Public\private");

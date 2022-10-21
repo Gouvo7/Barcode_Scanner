@@ -139,56 +139,28 @@ namespace Barcode_Scanner
              * If not, then we will insert the corresponding values to the table */
             foreach (List<String> sublist in mylist)
             {
-                bool canInsert = false;
                 using (MySqlConnection conn = new MySqlConnection(connectionString))
                 {
-                    string query_tmp = "select * from wcm_doc where wcmdoc_URL like '%@url%' and wcmDOC_FileType = 9";
+                    string query_tmp = "INSERT INTO WCM_DOC (wcmDOC_PR_ID,wcmDOC_TBL,wcmDOC_FieldID,wcmDOC_Title,wcmDOC_Type,wcmDOC_Filetype,wcmDOC_URL,wcmDOC_Pages) VALUES " +
+                        "(@pr_id, 'wcm_lac', 'wcmLAC_ID', '" + tmp + "', 200, 9, @wcmDoc_URL, @wcmDoc_Pages)";
                     using (MySqlCommand command = new MySqlCommand(query_tmp, conn))
                     {
-                        command.Parameters.AddWithValue("@url", sublist[0]);
+                        command.Parameters.AddWithValue("@pr_id", sublist[0]);
+                        command.Parameters.AddWithValue("@wcmDoc_URL", sublist[1]);
+                        command.Parameters.AddWithValue("@wcmDOC_Pages", sublist[2]);
                         conn.Open();
-                        var res = Convert.ToInt32(command.ExecuteScalar());
-                        if (res == 0)
-                            canInsert = true;
-                        else
-                            Console.WriteLine("Cannot Insert");
-                        conn.Close();
-                        /*
-                            using (MySqlDataReader reader = command.Executer())
-                            {
-                                if (reader.HasRows)
-                                    Console.WriteLine("CANNOT INSERT");
-                                else
-                                    canInsert = true;
-                                reader.Close();
-                        }*/
-                    }
-                }
-                if (canInsert)
-                {
-                    using (MySqlConnection conn = new MySqlConnection(connectionString))
-                    {
-                        string query_tmp = "INSERT INTO WCM_DOC (wcmDOC_PR_ID,wcmDOC_TBL,wcmDOC_FieldID,wcmDOC_Title,wcmDOC_Type,wcmDOC_Filetype,wcmDOC_URL,wcmDOC_Pages) VALUES " +
-                            "(@pr_id, 'wcm_lac', 'wcmLAC_ID', '" + tmp + "', 200, 9, @wcmDoc_URL, @wcmDoc_Pages)";
-                        using (MySqlCommand command = new MySqlCommand(query_tmp, conn))
+                        try
                         {
-                            command.Parameters.AddWithValue("@pr_id", sublist[0]);
-                            command.Parameters.AddWithValue("@wcmDoc_URL", sublist[1]);
-                            command.Parameters.AddWithValue("@wcmDOC_Pages", sublist[2]);
-                            conn.Open();
-                            try
-                            {
-                                int res = command.ExecuteNonQuery();
-                                if (res == 1)
-                                    no_Changes++;
+                            int res = command.ExecuteNonQuery();
+                            if (res == 1)
+                                no_Changes++;
                                 Console.WriteLine("Succsefully inserted file: " + sublist[1]);
-                            }
-                            catch (MySqlException)
-                            {
-                                Console.WriteLine("Error: Duplicate entry was found for doc: " + sublist[1]);
-                            }
-                            conn.Close();
                         }
+                        catch (MySqlException)
+                        {
+                            Console.WriteLine("Error: Duplicate entry was found for doc: " + sublist[1]);
+                        }
+                            conn.Close();
                     }
                 }
             }
@@ -198,10 +170,3 @@ namespace Barcode_Scanner
         }
     }
 }
-//      For Tomorrow
-// To move a file or folder to a new location:
-
-
-// To move an entire directory. To programmatically modify or combine
-// path strings, use the System.IO.Path class.
-//System.IO.Directory.Move(@"C:\Users\Public\public\test\", @"C:\Users\Public\private");
